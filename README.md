@@ -1,8 +1,6 @@
 # nav.js
 
-## deps :
-
-- requires [hook.js](https://github.com/comidev-france/hook.js/blob/main/hook.js)
+requires [hook.js](https://github.com/comidev-france/hook.js/blob/main/hook.js)
 
 ## usage :
 
