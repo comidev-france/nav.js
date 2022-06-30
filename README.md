@@ -1,6 +1,6 @@
 # nav.js
 
-- detect back and forward button pressed in any js app that relies on popstate / pushstate 
+- detect browser back and forward button pressed in any js app that relies on popstate / pushstate 
 
 ```
 window.addEventListener('nav::user_asked_history', function(e) {
