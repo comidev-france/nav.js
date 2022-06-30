@@ -1,5 +1,11 @@
 # nav.js
 
+## deps :
+
+- requires [hook.js](https://github.com/comidev-france/hook.js)
+
+## usage :
+
 - detect browser back and forward button pressed in any js app that relies on popstate / pushstate 
 
 ```
