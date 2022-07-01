@@ -6,23 +6,27 @@
 /*   By: mafaussu <mafaussu@student.42lyon.fr>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2022/06/30 13:00:00 by mafaussu          #+#    #+#             */
-/*   Updated: 2022/06/30 13:14:21 by mafaussu         ###   ########lyon.fr   */
+/*   Updated: 2022/06/31 15:52:21 by mafaussu         ###   ########lyon.fr   */
 /*                                                                            */
 /* ************************************************************************** */
 
 console.log("nav::init");
 
-const state_time_key = '__tsd_nav_creation';
+const nav_state_time_key = '__tsd_nav_creation';
+
+let nav_prev_position;
+let nav_direction;
 let nav_position;
 let nav_history;
 
 function init_nav()
 {
+    nav_direction = "initial page";
     nav_position = 1;
     nav_history = [{
             url: document.location.href,
             state: {
-                [state_time_key]: new Date().getTime()
+                [nav_state_time_key]: new Date().getTime()
             }
         }
     ];
@@ -30,26 +34,31 @@ function init_nav()
 
 init_nav();
 
-function log_nav_position() {
-    console.log("nav::position=" + nav_position + "/" + nav_history.length);
+function log_nav_position(nav_position, nav_history, nav_direction) {
+    console.log("nav::position=" + nav_position + "/" + nav_history.length + " direction=" + nav_direction);
+    console.log("nav::----------")
 }
 
 function log_nav_history()
 {
-    log_nav_position();
+    log_nav_position(nav_position, nav_history, nav_direction);
     for (const k in nav_history)
-        console.log("nav::history[" + k + "]=" + nav_history[k].url + " (" + nav_history[k].state[state_time_key] + ")");
+        console.log("nav::history[" + k + "]=" + nav_history[k].url + " (" + nav_history[k].state[nav_state_time_key] + ")");
 }
 
-window.addEventListener('nav::user_asked_history', function(e) {
-    console.log('nav::direction=', e.detail.direction);
-})
-window.addEventListener('nav::tick', function() {
-    log_nav_position();
+window.addEventListener('nav::tick', function(e) {
+    console.log("nav::location=" + document.location);
+    log_nav_position(e.detail.nav_position, e.detail.nav_history, e.detail.nav_direction);
 })
 
 function nav_dispatch() {
-    window.dispatchEvent(new CustomEvent('nav::tick'));
+    window.dispatchEvent(new CustomEvent('nav::tick', {detail: {
+            nav_prev_position: nav_prev_position,
+            nav_position: nav_position,
+            nav_history: nav_history,
+            nav_state: nav_history[nav_position - 1].state,
+            nav_direction: nav_direction,
+    }}));
 }
 
 nav_dispatch();
@@ -67,13 +76,13 @@ function is_nav_backward_possible()
 
 window.history.pushState = hook(window.history.pushState, function (cb, ...args){
     console.log('nav::pushState(...)');
-    console.log(args);
     if (args.length < 2 || typeof args[0] !== 'object')
         return cb(args);
-    args[0][state_time_key] = new Date().getTime()
+    args[0][nav_state_time_key] = new Date().getTime()
     const value = cb(args);
     nav_history.push({url: document.location.href, state: args[0]});
     nav_position = nav_history.length;
+    nav_direction = "forward";
     nav_dispatch();
     return (value);
 });
@@ -81,13 +90,14 @@ window.history.pushState = hook(window.history.pushState, function (cb, ...args)
 window.history.replaceState = hook(window.history.replaceState, function (cb, ...args) {
     console.log('nav::replaceState(...)');
     const value = cb(args);
-    nav_history.splice(0, 1);
+    nav_direction = "redirection";
     nav_dispatch();
     return (value);
 });
 
 window.history.go = hook(window.history.go, function (cb, ...args) {
     console.log('nav::go(...)', args);
+    nav_prev_position = nav_position;
     const value = cb(args);
     if (args.length && args[0] !== 0)
     {
@@ -100,13 +110,13 @@ window.history.go = hook(window.history.go, function (cb, ...args) {
 });
 
 window.addEventListener("popstate", function(e) {
-    console.log("nav::location=" + document.location);
-    const prev_nav_position = nav_position;
+    console.log('nav::onPopState');
+    nav_prev_position = nav_position;
     nav_position = 0;
     if (typeof e.state == 'undefined'
         || e.state == null
-        || typeof e.state[state_time_key] == 'undefined'
-        || e.state[state_time_key] == null)
+        || typeof e.state[nav_state_time_key] == 'undefined'
+        || e.state[nav_state_time_key] == null)
         nav_position = 1;
     else
     {
@@ -114,7 +124,7 @@ window.addEventListener("popstate", function(e) {
         while (k >= 0)
         {
             if (nav_history[k].url === document.location.href
-                && nav_history[k].state[state_time_key] === e.state[state_time_key])
+                && nav_history[k].state[nav_state_time_key] === e.state[nav_state_time_key])
             {
                 nav_position = Number(k) + 1;
                 break;
@@ -126,20 +136,15 @@ window.addEventListener("popstate", function(e) {
     {
         console.log("nav::warning=sync failed, url was not found in the history stack.",
             "url=" + document.location.href, ' creation=',
-            e.state ? e.state[state_time_key] : '');
-        nav_position = 1;
+            e.state ? e.state[nav_state_time_key] : '');
+        nav_position = nav_history.length;
+        nav_direction = "redirection";
         nav_dispatch();
     }
     else
     {
-        window.dispatchEvent(new CustomEvent('nav::user_asked_history', {
-            detail: {
-                'prev_nav_position': prev_nav_position,
-                'nav_position': nav_position,
-                'direction': prev_nav_position <= nav_position ? 'forward' : 'backward',
-                'pop_state_event': e
-            }
-        }));
+        nav_direction = nav_position < nav_prev_position ? 'backward' : 'forward';
+        console.log("nav_test:", nav_prev_position)
         nav_dispatch();
     }
 });
