@@ -144,7 +144,6 @@ window.addEventListener("popstate", function(e) {
     else
     {
         nav_direction = nav_position < nav_prev_position ? 'backward' : 'forward';
-        console.log("nav_test:", nav_prev_position)
         nav_dispatch();
     }
 });
