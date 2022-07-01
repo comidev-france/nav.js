@@ -12,13 +12,20 @@
 
 console.log("nav::init");
 
+const state_time_key = '__tsd_nav_creation';
 let nav_position;
 let nav_history;
 
 function init_nav()
 {
     nav_position = 1;
-    nav_history = [{url: document.location.href, creation: new Date().getTime()}];
+    nav_history = [{
+            url: document.location.href,
+            state: {
+                [state_time_key]: new Date().getTime()
+            }
+        }
+    ];
 }
 
 init_nav();
@@ -31,10 +38,21 @@ function log_nav_history()
 {
     log_nav_position();
     for (const k in nav_history)
-        console.log("nav::history[" + k + "]=" + nav_history[k].url + " (" + nav_history[k].creation + ")");
+        console.log("nav::history[" + k + "]=" + nav_history[k].url + " (" + nav_history[k].state[state_time_key] + ")");
 }
 
-log_nav_history();
+window.addEventListener('nav::user_asked_history', function(e) {
+    console.log('nav::direction=', e.detail.direction);
+})
+window.addEventListener('nav::tick', function() {
+    log_nav_position();
+})
+
+function nav_dispatch() {
+    window.dispatchEvent(new CustomEvent('nav::tick'));
+}
+
+nav_dispatch();
 
 function is_nav_forward_possible()
 {
@@ -47,20 +65,16 @@ function is_nav_backward_possible()
         ((nav_position === 1) && (nav_history.length < window.history.length)));
 }
 
-window.history.forward = hook(window.history.forward, function() {
-    console.log('nav::forward');
-})
-
 window.history.pushState = hook(window.history.pushState, function (cb, ...args){
     console.log('nav::pushState(...)');
     console.log(args);
     if (args.length < 2 || typeof args[0] !== 'object')
         return cb(args);
-    args[0].__nav_creation = new Date().getTime()
+    args[0][state_time_key] = new Date().getTime()
     const value = cb(args);
-    nav_history.push({url: document.location.href, creation: args[0].__nav_creation});
+    nav_history.push({url: document.location.href, state: args[0]});
     nav_position = nav_history.length;
-    log_nav_position();
+    nav_dispatch();
     return (value);
 });
 
@@ -68,7 +82,7 @@ window.history.replaceState = hook(window.history.replaceState, function (cb, ..
     console.log('nav::replaceState(...)');
     const value = cb(args);
     nav_history.splice(0, 1);
-    log_nav_position();
+    nav_dispatch();
     return (value);
 });
 
@@ -87,13 +101,12 @@ window.history.go = hook(window.history.go, function (cb, ...args) {
 
 window.addEventListener("popstate", function(e) {
     console.log("nav::location=" + document.location);
-    console.log("nav::popstate=", e);
     const prev_nav_position = nav_position;
     nav_position = 0;
     if (typeof e.state == 'undefined'
         || e.state == null
-        || typeof e.state.__nav_creation == 'undefined'
-        || e.state.__nav_creation == null)
+        || typeof e.state[state_time_key] == 'undefined'
+        || e.state[state_time_key] == null)
         nav_position = 1;
     else
     {
@@ -101,7 +114,7 @@ window.addEventListener("popstate", function(e) {
         while (k >= 0)
         {
             if (nav_history[k].url === document.location.href
-                && nav_history[k].creation === e.state.__nav_creation)
+                && nav_history[k].state[state_time_key] === e.state[state_time_key])
             {
                 nav_position = Number(k) + 1;
                 break;
@@ -113,9 +126,9 @@ window.addEventListener("popstate", function(e) {
     {
         console.log("nav::warning=sync failed, url was not found in the history stack.",
             "url=" + document.location.href, ' creation=',
-            e.state ? e.state.__nav_creation : '');
+            e.state ? e.state[state_time_key] : '');
         nav_position = 1;
-        log_nav_history();
+        nav_dispatch();
     }
     else
     {
@@ -127,11 +140,6 @@ window.addEventListener("popstate", function(e) {
                 'pop_state_event': e
             }
         }));
-        log_nav_position();
+        nav_dispatch();
     }
 });
-
-window.addEventListener('nav::user_asked_history', function(e) {
-    console.log(e);
-    console.log('nav::direction=', e.detail.direction);
-})
