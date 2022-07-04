@@ -1,6 +1,6 @@
 # nav.js
 
-Because JS push/popstate API sucks, this libs was created.
+Javascript History API superset.
 Detect browser navigation event, even forward / backward buttons.
 
 requires [hook.js](https://github.com/comidev-france/hook.js/blob/main/hook.js)
