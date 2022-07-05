@@ -6,14 +6,13 @@
 /*   By: mafaussu <mafaussu@student.42lyon.fr>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2022/06/30 13:00:00 by mafaussu          #+#    #+#             */
-/*   Updated: 2022/06/31 15:52:21 by mafaussu         ###   ########lyon.fr   */
+/*   Updated: 2022/07/5  15:52:21 by mafaussu         ###   ########lyon.fr   */
 /*                                                                            */
 /* ************************************************************************** */
 
 console.log("nav::init");
 
 const nav_state_time_key = '__tsd_nav_creation';
-
 let nav_prev_position;
 let nav_direction;
 let nav_position;
@@ -24,11 +23,11 @@ function init_nav()
     nav_direction = "initial page";
     nav_position = 1;
     nav_history = [{
-            url: document.location.href,
-            state: {
-                [nav_state_time_key]: new Date().getTime()
-            }
+        url: document.location.href,
+        state: {
+            [nav_state_time_key]: new Date().getTime()
         }
+    }
     ];
 }
 
@@ -51,13 +50,14 @@ window.addEventListener('nav::tick', function(e) {
     log_nav_position(e.detail.nav_position, e.detail.nav_history, e.detail.nav_direction);
 })
 
-function nav_dispatch() {
+function nav_dispatch(e = null) {
     window.dispatchEvent(new CustomEvent('nav::tick', {detail: {
             nav_prev_position: nav_prev_position,
             nav_position: nav_position,
             nav_history: nav_history,
             nav_state: nav_history[nav_position - 1].state,
             nav_direction: nav_direction,
+            popstate_event: e
     }}));
 }
 
@@ -76,7 +76,9 @@ function is_nav_backward_possible()
 
 window.history.pushState = hook(window.history.pushState, function (cb, ...args){
     console.log('nav::pushState(...)');
-    if (args.length < 2 || typeof args[0] !== 'object')
+    if (args.length < 2 || typeof args[0] !== 'object'
+        || args[2] === window.location.pathname
+    )
         return cb(args);
     args[0][nav_state_time_key] = new Date().getTime()
     const value = cb(args);
@@ -89,6 +91,11 @@ window.history.pushState = hook(window.history.pushState, function (cb, ...args)
 
 window.history.replaceState = hook(window.history.replaceState, function (cb, ...args) {
     console.log('nav::replaceState(...)');
+    if (args.length < 2 || typeof args[0] !== 'object'
+        || args[2] === window.location.pathname)
+        return cb(args);
+    args[0][nav_state_time_key] = new Date().getTime()
+    nav_history[nav_position - 1] = {url: args[2], state: args[0]};
     const value = cb(args);
     nav_direction = "redirection";
     nav_dispatch();
@@ -99,18 +106,21 @@ window.history.go = hook(window.history.go, function (cb, ...args) {
     console.log('nav::go(...)', args);
     nav_prev_position = nav_position;
     const value = cb(args);
-    if (args.length && args[0] !== 0)
-    {
-        if ((nav_position + args[0] >= 1)
-            ||
-            (nav_position + args[0] <= nav_history.length))
+    if (args.length < 1 || isNaN(args[0]))
+        return value;
+    args[0] = Math.round(args[0]);
+    if (args[0] === 0)
+        return value;
+    if ((nav_position + args[0] >= 1)
+         ||
+        (nav_position + args[0] <= nav_history.length))
             nav_position += args[0];
-    }
     return (value);
 });
 
 window.addEventListener("popstate", function(e) {
-    console.log('nav::onPopState');
+
+    console.log('nav::onPopState 42');
     nav_prev_position = nav_position;
     nav_position = 0;
     if (typeof e.state == 'undefined'
@@ -139,11 +149,11 @@ window.addEventListener("popstate", function(e) {
             e.state ? e.state[nav_state_time_key] : '');
         nav_position = nav_history.length;
         nav_direction = "redirection";
-        nav_dispatch();
+        nav_dispatch(e);
     }
     else
     {
         nav_direction = nav_position < nav_prev_position ? 'backward' : 'forward';
-        nav_dispatch();
+        nav_dispatch(e);
     }
 });
