@@ -3,16 +3,18 @@
 /*                                                        :::      ::::::::   */
 /*   hook.js                                            :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mafaussu <mafaussu@student.42lyon.fr>      +#+  +:+       +#+        */
+/*   By: mafaussu <mafaussu@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2022/06/30 13:00:00 by mafaussu          #+#    #+#             */
-/*   Updated: 2022/07/05 14:34:21 by mafaussu         ###   ########lyon.fr   */
+/*   Updated: 2022/06/30 18:42:21 by mafaussu         ###   ########lyon.fr   */
 /*                                                                            */
 /* ************************************************************************** */
 
 console.log("nav::init");
 
 const nav_state_time_key = '__tsd_nav_creation';
+const nav_url_key = '__tsd_nav_url';
+
 let nav_prev_position;
 let nav_direction;
 let nav_position;
@@ -50,6 +52,8 @@ window.addEventListener('nav::tick', function(e) {
     log_nav_position(e.detail.nav_position, e.detail.nav_history, e.detail.nav_direction);
 })
 
+
+
 function nav_dispatch(e = null) {
     window.dispatchEvent(new CustomEvent('nav::tick', {detail: {
             nav_prev_position: nav_prev_position,
@@ -58,7 +62,22 @@ function nav_dispatch(e = null) {
             nav_state: nav_history[nav_position - 1].state,
             nav_direction: nav_direction,
             popstate_event: e
-    }}));
+    }, cancelable: true}));
+}
+
+function nav_dispatch_before(type, args, state = null) {
+    if (!type || !args)
+        throw new Error("Invalid args!!");
+    console.log("NAV::DISPATCH_BEFORE", type, state);
+    return window.dispatchEvent(new CustomEvent('nav::beforeTick', {detail: {
+            nav_prev_position: nav_prev_position,
+            nav_position: nav_position,
+            nav_history: nav_history,
+            nav_state: state,
+            nav_direction: nav_direction,
+            type: type,
+            args: args
+        }, cancelable: true}));
 }
 
 nav_dispatch();
@@ -81,6 +100,9 @@ window.history.pushState = hook(window.history.pushState, function (cb, ...args)
     )
         return cb(args);
     args[0][nav_state_time_key] = new Date().getTime()
+    args[0][nav_url_key] = args[2];
+    if (!nav_dispatch_before("pushState", args))
+        return false;
     const value = cb(args);
     nav_history.push({url: document.location.href, state: args[0]});
     nav_position = nav_history.length;
@@ -91,10 +113,17 @@ window.history.pushState = hook(window.history.pushState, function (cb, ...args)
 
 window.history.replaceState = hook(window.history.replaceState, function (cb, ...args) {
     console.log('nav::replaceState(...)');
+    //throw new Error("ERRRR");
+    if (!nav_dispatch_before("replaceState", args) && !args[0].force) {
+        console.log("FAILED SAVED == 0");
+        return false;
+    }
     if (args.length < 2 || typeof args[0] !== 'object'
         || args[2] === window.location.pathname)
         return cb(args);
     args[0][nav_state_time_key] = new Date().getTime()
+    args[0][nav_url_key] = args[2];
+
     nav_history[nav_position - 1] = {url: args[2], state: args[0]};
     const value = cb(args);
     nav_direction = "redirection";
@@ -104,7 +133,10 @@ window.history.replaceState = hook(window.history.replaceState, function (cb, ..
 
 window.history.go = hook(window.history.go, function (cb, ...args) {
     console.log('nav::go(...)', args);
+    if (!nav_dispatch_before("go", args))
+        return false;
     nav_prev_position = nav_position;
+
     const value = cb(args);
     if (args.length < 1 || isNaN(args[0]))
         return value;
@@ -119,8 +151,14 @@ window.history.go = hook(window.history.go, function (cb, ...args) {
 });
 
 window.addEventListener("popstate", function(e) {
-
     console.log('nav::onPopState 42');
+    if (!nav_dispatch_before("popstate", [], e.state))
+    {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        e.stopPropagation();
+        return false;
+    }
     nav_prev_position = nav_position;
     nav_position = 0;
     if (typeof e.state == 'undefined'
